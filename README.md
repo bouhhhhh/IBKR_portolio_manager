@@ -201,7 +201,7 @@ The system uses a JSON configuration file for flexible deployment across differe
 
 ### Historical Data Analysis
 
-Analyze individual stock performance with comprehensive historical data and advanced metrics:
+Analyze individual stock performance with comprehensive historical data and advanced metrics. QQQ for instance:
 
 ![Price History](Charts/QQQ_price_history.png)
 *Historical price chart with purchase cost basis and volume*
