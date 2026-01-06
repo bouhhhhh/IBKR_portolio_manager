@@ -40,6 +40,8 @@ class TransactionManager:
         """
         contract = Stock(symbol, exchange, currency)
         order = MarketOrder("BUY", qty)
+        order.tif = "GTC"  # Good-Til-Cancelled to allow orders outside market hours
+        order.outsideRth = True  # Allow orders outside regular trading hours
         
         # Optional: preview order first
         if dry_run:
@@ -101,6 +103,8 @@ class TransactionManager:
         """
         contract = Stock(symbol, exchange, currency)
         order = MarketOrder("SELL", qty)
+        order.tif = "GTC"  # Good-Til-Cancelled to allow orders outside market hours
+        order.outsideRth = True  # Allow orders outside regular trading hours
         
         if dry_run:
             try:

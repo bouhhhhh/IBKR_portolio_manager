@@ -229,3 +229,82 @@ class PortfolioManager:
         if 'TotalCashValue' in summary:
             return float(summary['TotalCashValue']['value'])
         return 0.0
+    
+    def get_portfolio_returns(self) -> Dict[str, float]:
+        """
+        Calculate portfolio returns/yield.
+        
+        Returns:
+            Dictionary with total return, unrealized P&L, realized P&L, and return percentage
+        """
+        positions = self.get_portfolio_positions()
+        summary = self.get_account_summary()
+        
+        # Sum up P&L
+        total_unrealized_pnl = sum(pos['unrealizedPNL'] for pos in positions)
+        total_realized_pnl = sum(pos['realizedPNL'] for pos in positions)
+        
+        # Get from account summary if available
+        if 'UnrealizedPnL' in summary:
+            total_unrealized_pnl = float(summary['UnrealizedPnL']['value'])
+        if 'RealizedPnL' in summary:
+            total_realized_pnl = float(summary['RealizedPnL']['value'])
+        
+        total_pnl = total_unrealized_pnl + total_realized_pnl
+        
+        # Calculate cost basis (current value - unrealized P&L)
+        current_value = self.get_portfolio_value()
+        cash = self.get_cash_balance()
+        invested_value = current_value - cash
+        cost_basis = invested_value - total_unrealized_pnl
+        
+        # Calculate return percentage
+        return_pct = (total_pnl / cost_basis * 100) if cost_basis != 0 else 0.0
+        
+        return {
+            'total_pnl': total_pnl,
+            'unrealized_pnl': total_unrealized_pnl,
+            'realized_pnl': total_realized_pnl,
+            'cost_basis': cost_basis,
+            'return_percentage': return_pct,
+            'current_value': invested_value
+        }
+    
+    def get_position_returns(self) -> List[Dict]:
+        """
+        Calculate returns for each position.
+        
+        Returns:
+            List of dictionaries with position return details
+        """
+        positions = self.get_portfolio_positions()
+        position_returns = []
+        
+        for pos in positions:
+            symbol = pos['contract'].symbol
+            quantity = pos['position']
+            avg_cost = pos['avgCost']
+            market_price = pos['marketPrice']
+            market_value = pos['marketValue']
+            unrealized_pnl = pos['unrealizedPNL']
+            realized_pnl = pos['realizedPNL']
+            
+            # Calculate cost basis and return
+            cost_basis = quantity * avg_cost
+            total_pnl = unrealized_pnl + realized_pnl
+            return_pct = (unrealized_pnl / cost_basis * 100) if cost_basis != 0 else 0.0
+            
+            position_returns.append({
+                'symbol': symbol,
+                'quantity': quantity,
+                'avg_cost': avg_cost,
+                'market_price': market_price,
+                'cost_basis': cost_basis,
+                'market_value': market_value,
+                'unrealized_pnl': unrealized_pnl,
+                'realized_pnl': realized_pnl,
+                'total_pnl': total_pnl,
+                'return_percentage': return_pct
+            })
+        
+        return position_returns
