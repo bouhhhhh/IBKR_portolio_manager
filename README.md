@@ -407,6 +407,14 @@ IBKR_portolio_manager/
 
 ---
 
+## Working on...
+
+- **More info for individual stocks**: everything IBKR allows and more
+- **More info on yield (and predicted yield) and cashflow allocation**: Predicting futur yield and see yield in the performance
+
+
+---
+
 ## Development Notes
 
 ### Python Version Compatibility
