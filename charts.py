@@ -1,6 +1,19 @@
 """
 Module for generating portfolio visualization charts.
 """
+import warnings
+import os
+
+# Suppress matplotlib warnings
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+
+# Suppress macOS-specific matplotlib backend warnings
+os.environ['MPLBACKEND'] = 'TkAgg'  # Use TkAgg backend to avoid macOS issues
+
+import matplotlib
+matplotlib.use('TkAgg', force=True)
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from typing import List, Dict
@@ -232,6 +245,135 @@ class PortfolioCharts:
         ax.set_xticks(x)
         ax.set_xticklabels(all_symbols)
         ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    @staticmethod
+    def plot_price_history(
+        df,
+        symbol: str,
+        avg_cost: float = None,
+        title: str = None
+    ):
+        """
+        Plot historical price chart with optional purchase price line.
+        
+        Args:
+            df: DataFrame with historical data (must have 'close' column and datetime index)
+            symbol: Stock symbol
+            avg_cost: Average cost basis to display as horizontal line
+            title: Custom title (default uses symbol)
+        """
+        if df is None or df.empty:
+            print(f"No historical data available for {symbol}")
+            return
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={'height_ratios': [3, 1]})
+        
+        # Plot price
+        ax1.plot(df.index, df['close'], linewidth=2, color='steelblue', label='Close Price')
+        
+        # Add purchase price line if provided
+        if avg_cost is not None and avg_cost > 0:
+            ax1.axhline(y=avg_cost, color='red', linestyle='--', linewidth=2, 
+                       label=f'Avg Cost: ${avg_cost:.2f}', alpha=0.7)
+            
+            # Shade profit/loss regions
+            current_price = df['close'].iloc[-1]
+            if current_price > avg_cost:
+                ax1.fill_between(df.index, avg_cost, df['close'], 
+                               where=(df['close'] >= avg_cost), 
+                               alpha=0.2, color='green', label='Profit Region')
+            else:
+                ax1.fill_between(df.index, avg_cost, df['close'],
+                               where=(df['close'] <= avg_cost),
+                               alpha=0.2, color='red', label='Loss Region')
+        
+        # Formatting price chart
+        ax1.set_ylabel('Price ($)', fontsize=12, fontweight='bold')
+        ax1.set_title(title or f'{symbol} Price History', fontsize=14, fontweight='bold', pad=20)
+        ax1.legend(loc='upper left')
+        ax1.grid(True, alpha=0.3)
+        
+        # Add price annotations
+        first_price = df['close'].iloc[0]
+        last_price = df['close'].iloc[-1]
+        price_change = ((last_price - first_price) / first_price) * 100
+        
+        color = 'green' if price_change > 0 else 'red'
+        ax1.text(0.02, 0.98, f'Start: ${first_price:.2f}', transform=ax1.transAxes,
+                va='top', fontsize=10, bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        ax1.text(0.02, 0.91, f'Current: ${last_price:.2f}\n({price_change:+.2f}%)', 
+                transform=ax1.transAxes, va='top', fontsize=10, color=color,
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Plot volume
+        colors = ['green' if df['close'].iloc[i] >= df['open'].iloc[i] else 'red' 
+                 for i in range(len(df))]
+        ax2.bar(df.index, df['volume'], color=colors, alpha=0.5, width=1)
+        ax2.set_ylabel('Volume', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Date', fontsize=12, fontweight='bold')
+        ax2.grid(True, alpha=0.3, axis='y')
+        
+        # Format x-axis
+        fig.autofmt_xdate()
+        
+        plt.tight_layout()
+        plt.show()
+    
+    @staticmethod
+    def plot_performance_metrics(
+        metrics: dict,
+        symbol: str
+    ):
+        """
+        Display performance metrics as a bar chart.
+        
+        Args:
+            metrics: Dictionary with performance metrics
+            symbol: Stock symbol
+        """
+        if not metrics or 'total_return' not in metrics:
+            print(f"No metrics available for {symbol}")
+            return
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        # Prepare data (exclude non-percentage values)
+        metric_names = ['Total Return', 'Volatility', 'Max Drawdown']
+        metric_values = [
+            metrics['total_return'],
+            metrics['volatility'],
+            metrics['max_drawdown']
+        ]
+        colors = ['green' if v > 0 else 'red' for v in metric_values]
+        
+        # Create bars
+        bars = ax.bar(metric_names, metric_values, color=colors, alpha=0.7, edgecolor='black')
+        
+        # Add value labels
+        for bar, value in zip(bars, metric_values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{value:+.2f}%',
+                   ha='center', va='bottom' if height > 0 else 'top',
+                   fontsize=11, fontweight='bold')
+        
+        # Add Sharpe ratio as text annotation
+        sharpe = metrics.get('sharpe_ratio', 0)
+        sharpe_color = 'green' if sharpe > 1 else 'orange' if sharpe > 0 else 'red'
+        ax.text(0.98, 0.98, f'Sharpe Ratio: {sharpe:.2f}',
+               transform=ax.transAxes, ha='right', va='top',
+               fontsize=12, fontweight='bold', color=sharpe_color,
+               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Formatting
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
+        ax.set_ylabel('Percentage (%)', fontsize=12, fontweight='bold')
+        ax.set_title(f'{symbol} Performance Metrics ({metrics.get("days", 0)} days)',
+                    fontsize=14, fontweight='bold', pad=20)
         ax.grid(axis='y', alpha=0.3)
         
         plt.tight_layout()

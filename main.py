@@ -19,6 +19,7 @@ from transactions import TransactionManager
 from portfolio_manager import PortfolioManager
 from display import PortfolioDisplay
 from charts import PortfolioCharts
+from historical_data import HistoricalDataManager
 
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
@@ -387,6 +388,8 @@ def show_help():
     print("  portfolio / p     - Show current portfolio status")
     print("  balance / b       - Show account balance and financial summary")
     print("  returns / yield   - Show portfolio returns and performance")
+    print("  history <SYMBOL>  - Show price history for a stock (e.g., 'history SPY')")
+    print("  <SYMBOL>          - Quick access to stock history (e.g., 'SPY')")
     print("  chart allocation  - Display portfolio allocation pie chart")
     print("  chart returns     - Display position returns bar chart")
     print("  chart pnl         - Display P&L breakdown chart")
@@ -440,6 +443,7 @@ def main(config_path: str = "config.json"):
         pm = PortfolioManager(ib)
         tm = TransactionManager(ib)
         display = PortfolioDisplay()
+        hist = HistoricalDataManager(ib)
         
         print("\n" + "=" * 80)
         print("PORTFOLIO MANAGER SERVER - READY")
@@ -449,7 +453,8 @@ def main(config_path: str = "config.json"):
         # Command loop
         while True:
             try:
-                command = input("\n> ").strip().lower()
+                command_raw = input("\n> ").strip()
+                command = command_raw.lower()
                 
                 if not command:
                     continue
@@ -474,6 +479,50 @@ def main(config_path: str = "config.json"):
                 # Handle returns/yield display
                 elif command in ['returns', 'yield', 'performance']:
                     display_returns(pm, display)
+                
+                # Handle history commands
+                elif command.startswith('history '):
+                    symbol = command.split(' ', 1)[1].upper() if ' ' in command else ''
+                    if symbol:
+                        # Find position data if available
+                        positions = pm.get_portfolio_positions()
+                        avg_cost = None
+                        for pos in positions:
+                            if pos['contract'].symbol == symbol:
+                                avg_cost = pos['avgCost']
+                                break
+                        
+                        print(f"\nFetching historical data for {symbol}...")
+                        history_data = hist.get_position_history(symbol, avg_cost or 0, duration="1 Y")
+                        
+                        if 'error' in history_data:
+                            print(f"Error: {history_data['error']}")
+                        else:
+                            # Display metrics
+                            print("\n" + "=" * 80)
+                            print(f"{symbol} - HISTORICAL ANALYSIS (1 Year)")
+                            print("=" * 80)
+                            metrics = history_data['metrics']
+                            print(f"Start Price:      ${metrics['start_price']:.2f}")
+                            print(f"Current Price:    ${metrics['end_price']:.2f}")
+                            print(f"Total Return:     {metrics['total_return']:+.2f}%")
+                            if avg_cost:
+                                print(f"Avg Cost:         ${avg_cost:.2f}")
+                                print(f"Your Return:      {history_data['purchase_return']:+.2f}%")
+                            print(f"Volatility:       {metrics['volatility']:.2f}%")
+                            print(f"Max Drawdown:     {metrics['max_drawdown']:.2f}%")
+                            print(f"Sharpe Ratio:     {metrics['sharpe_ratio']:.2f}")
+                            print("=" * 80)
+                            
+                            # Show charts
+                            PortfolioCharts.plot_price_history(
+                                history_data['data'], symbol, avg_cost
+                            )
+                            PortfolioCharts.plot_performance_metrics(
+                                metrics, symbol
+                            )
+                    else:
+                        print("Usage: history <SYMBOL>")
                 
                 # Handle chart commands
                 elif command.startswith('chart '):
@@ -550,6 +599,47 @@ def main(config_path: str = "config.json"):
                     dry_run = settings.get('dry_run', True)
                     min_trade_value = settings.get('min_trade_value', 10.0)
                     print("✓ Configuration reloaded")
+                
+                # Handle stock symbol as shortcut for history
+                elif command_raw.isupper() and len(command_raw) <= 5 and command_raw.isalpha():
+                    # Treat as stock symbol shortcut
+                    symbol = command_raw
+                    positions = pm.get_portfolio_positions()
+                    avg_cost = None
+                    for pos in positions:
+                        if pos['contract'].symbol == symbol:
+                            avg_cost = pos['avgCost']
+                            break
+                    
+                    print(f"\nFetching historical data for {symbol}...")
+                    history_data = hist.get_position_history(symbol, avg_cost or 0, duration="1 Y")
+                    
+                    if 'error' in history_data:
+                        print(f"Error: {history_data['error']}")
+                    else:
+                        # Display metrics
+                        print("\n" + "=" * 80)
+                        print(f"{symbol} - HISTORICAL ANALYSIS (1 Year)")
+                        print("=" * 80)
+                        metrics = history_data['metrics']
+                        print(f"Start Price:      ${metrics['start_price']:.2f}")
+                        print(f"Current Price:    ${metrics['end_price']:.2f}")
+                        print(f"Total Return:     {metrics['total_return']:+.2f}%")
+                        if avg_cost:
+                            print(f"Avg Cost:         ${avg_cost:.2f}")
+                            print(f"Your Return:      {history_data['purchase_return']:+.2f}%")
+                        print(f"Volatility:       {metrics['volatility']:.2f}%")
+                        print(f"Max Drawdown:     {metrics['max_drawdown']:.2f}%")
+                        print(f"Sharpe Ratio:     {metrics['sharpe_ratio']:.2f}")
+                        print("=" * 80)
+                        
+                        # Show charts
+                        PortfolioCharts.plot_price_history(
+                            history_data['data'], symbol, avg_cost
+                        )
+                        PortfolioCharts.plot_performance_metrics(
+                            metrics, symbol
+                        )
                 
                 # Handle unknown command
                 else:

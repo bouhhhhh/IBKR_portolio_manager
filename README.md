@@ -1,8 +1,8 @@
 # IBKR Portfolio Manager
 
-A sophisticated Python-based portfolio management system that automates real-time portfolio rebalancing through the Interactive Brokers API. This project bridges finance with backend engineering, featuring event-driven architecture, robust risk management, and comprehensive visualization tools.
+Developed in Python (C++ version currently in progress), this portfolio management system automates real-time rebalancing via the IBKR API. It is designed to evolve into a interactive application for my investment management
 
-![Portfolio Allocation](Charts/allocation_chart.png)
+![Portfolio Allocation](Charts/portfolio_allocation.png)
 *Real-time portfolio allocation visualization*
 
 ---
@@ -83,16 +83,36 @@ Generates interactive matplotlib charts for portfolio analysis.
 - Position returns bar charts (color-coded gains/losses)
 - P&L breakdown horizontal bars
 - Current vs target allocation comparisons
+- Historical price charts with purchase price overlay
+- Performance metrics visualization
 
-![Returns Chart](Charts/returns_chart.png)
+![Returns Chart](Charts/position_returns.png)
 *Position-level return analysis*
 
-#### 6. **`main.py`** - Interactive Server Interface
+#### 6. **`historical_data.py`** - Historical Analysis Engine
+Fetches and analyzes historical stock data with advanced performance metrics.
+
+**Key Features:**
+- Fetches up to 1 year of historical price data from IBKR
+- Calculates volatility (annualized standard deviation)
+- Computes maximum drawdown for risk assessment
+- Generates Sharpe ratio for risk-adjusted returns
+- Tracks returns from your purchase price
+
+```python
+from historical_data import HistoricalDataManager
+
+hist = HistoricalDataManager(ib)
+history = hist.get_position_history('SPY', avg_cost=667.41, duration='1 Y')
+metrics = history['metrics']  # volatility, sharpe ratio, max drawdown, etc.
+```
+
+#### 7. **`main.py`** - Interactive Server Interface
 Persistent command server that orchestrates all modules into a cohesive application.
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### `config.json` Structure
 
@@ -147,20 +167,7 @@ The system uses a JSON configuration file for flexible deployment across differe
 2. **IB Gateway or TWS** running locally
 3. **Python 3.10+** (compatible with Python 3.14 via event loop fix)
 
-### Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/bouhhhhh/IBKR_portolio_manager.git
-cd IBKR_portolio_manager
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install ib_insync matplotlib
-```
 
 ### Configuration Setup
 
@@ -168,22 +175,8 @@ pip install ib_insync matplotlib
 2. Ensure IB Gateway/TWS is running on the specified port
 3. Enable API connections in TWS (Edit → Global Configuration → API → Settings)
 
-### Running the Server
-
-```bash
-python main.py
-```
-
-Or with a custom config file:
-```bash
-python main.py my_strategy.json
-```
-
----
 
 ## Interactive Commands
-
-Once the server is running, use these commands to manage your portfolio:
 
 | Command | Shortcut | Description |
 |---------|----------|-------------|
@@ -200,12 +193,25 @@ Once the server is running, use these commands to manage your portfolio:
 | `help` | `h` | Display all available commands |
 | `quit` | `q` | Disconnect and exit |
 
-![P&L Chart](Charts/pnl_chart.png)
+![P&L Chart](Charts/p&l_breakdown_by_position.png)
 *Profit & Loss breakdown visualization*
+
+![Current vs Target](Charts/current_vs_target_allocation.png)
+*Current vs Target allocation comparison*
+
+### Historical Data Analysis
+
+Analyze individual stock performance with comprehensive historical data and advanced metrics:
+
+![Price History](Charts/QQQ_price_history.png)
+*Historical price chart with purchase cost basis and volume*
+
+![Performance Metrics](Charts/QQQ_performance_metric.png)
+*Performance metrics: Total return, volatility, max drawdown, and Sharpe ratio*
 
 ---
 
-## 🔧 Technical Highlights
+## Technical Highlights
 
 ### 1. Event-Driven Architecture
 Instead of blocking execution while waiting for order fills, the system uses event-based callbacks to monitor order status asynchronously. This allows concurrent order submission and real-time status updates.
@@ -255,9 +261,29 @@ Interactive matplotlib charts with:
 - Professional styling and legends
 - Export capabilities (save as PNG, PDF, SVG)
 
+### 7. Historical Data Analysis & Advanced Metrics
+Comprehensive stock analysis with:
+- **1-year historical price data** fetched directly from IBKR
+- **Volatility calculation** (annualized standard deviation)
+- **Maximum drawdown** analysis for risk assessment
+- **Sharpe ratio** for risk-adjusted return measurement
+- **Purchase price overlay** on charts showing profit/loss regions
+- **Volume analysis** with color-coded bars
+
+Metrics calculated:
+```python
+{
+    'total_return': 17.82%,        # Overall price change
+    'volatility': 23.56%,           # Annualized volatility
+    'max_drawdown': -22.88%,        # Largest peak-to-trough decline
+    'sharpe_ratio': 0.82,           # Risk-adjusted return (252 trading days)
+    'purchase_return': 3.04%        # Return from your cost basis
+}
+```
+
 ---
 
-## 📈 Example Workflow
+## Example Workflow
 
 ### 1. Start the Server
 ```bash
@@ -316,7 +342,28 @@ SPY        BUY      19           +$12,947.42
 QQQ        BUY      19           +$11,775.17
 ```
 
-### 6. Execute Rebalancing
+### 6. Analyze Stock History
+```bash
+> QQQ
+# Or: > history QQQ
+
+QQQ - HISTORICAL ANALYSIS (1 Year)
+================================================================================
+Start Price:      $524.54
+Current Price:    $617.99
+Total Return:     +17.82%
+Avg Cost:         $599.78
+Your Return:      +3.04%
+Volatility:       23.56%
+Max Drawdown:     -22.88%
+Sharpe Ratio:     0.82
+================================================================================
+
+# Opens price history chart with your purchase price line
+# Opens performance metrics bar chart
+```
+
+### 7. Execute Rebalancing
 ```bash
 > rebalance
 Submitting 4 orders concurrently...
@@ -329,7 +376,7 @@ Submitting 4 orders concurrently...
 
 ---
 
-## 🔐 Safety Features
+## Safety Features
 
 1. **Default Dry-Run Mode**: New users start in paper trading mode
 2. **Live Trading Confirmation**: Requires typing 'YES' to execute real trades
@@ -340,7 +387,7 @@ Submitting 4 orders concurrently...
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 IBKR_portolio_manager/
@@ -360,7 +407,7 @@ IBKR_portolio_manager/
 
 ---
 
-## 🛠️ Development Notes
+## Development Notes
 
 ### Python Version Compatibility
 - **Recommended**: Python 3.10 - 3.13
@@ -383,7 +430,7 @@ Ensure IBKR API is enabled:
 
 ---
 
-## 🎓 Educational Value
+## Educational Value
 
 This project demonstrates:
 
@@ -398,23 +445,6 @@ This project demonstrates:
 
 ---
 
-## 📝 License
-
-This project is open source and available for educational purposes.
-
----
-
-## 🤝 Contributing
-
-This is a personal project developed for internship applications. Feel free to fork and adapt for your own use.
-
----
-
-## 📧 Contact
-
-For questions or collaboration opportunities, please reach out through GitHub.
-
----
 
 **Note**: This is a portfolio management tool intended for educational purposes. Always test thoroughly in paper trading mode before using with real capital. Trading involves risk of loss.
 - Interactive Brokers TWS or IB Gateway running
@@ -435,3 +465,4 @@ chart allocation - Pie chart showing portfolio allocation by position with perce
 chart returns - Bar chart displaying return % for each position (green for gains, red for losses)
 chart pnl - Horizontal bar chart showing unrealized P&L breakdown by position
 chart target - Grouped bar chart comparing current allocation vs target allocation
+always adding some more!
