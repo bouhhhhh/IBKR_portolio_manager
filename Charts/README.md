@@ -30,10 +30,3 @@ Grouped bar chart comparing your current allocation against target allocations t
 2. Use any of the chart commands listed above
 3. Charts will open in interactive matplotlib windows
 4. Use the save button in the matplotlib toolbar to export as PNG
-
-## Notes
-
-- Charts are generated in real-time from your current portfolio data
-- All visualizations are interactive (zoom, pan, save)
-- Color scheme: Green = positive returns, Red = negative returns
-- Place your screenshot images here for README display

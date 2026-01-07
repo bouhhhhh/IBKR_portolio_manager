@@ -8,15 +8,13 @@ import os
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
-# Suppress macOS-specific matplotlib backend warnings
-os.environ['MPLBACKEND'] = 'TkAgg'  # Use TkAgg backend to avoid macOS issues
-
+# Use native macOS backend (no tkinter required)
 import matplotlib
-matplotlib.use('TkAgg', force=True)
+matplotlib.use('MacOSX', force=True)
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from typing import List, Dict
+from typing import List, Dict, Optional
 import numpy as np
 
 
@@ -24,15 +22,16 @@ class PortfolioCharts:
     """Generates charts for portfolio visualization."""
     
     @staticmethod
-    def plot_allocation_pie(positions: List[Dict], title: str = "Portfolio Allocation"):
+    def plot_allocation_pie(positions: List[Dict], cash_balance: float = 0.0, title: str = "Portfolio Allocation"):
         """
         Create a pie chart showing portfolio allocation by position.
         
         Args:
             positions: List of position dictionaries with marketValue
+            cash_balance: Cash balance to include in allocation
             title: Chart title
         """
-        if not positions:
+        if not positions and cash_balance <= 0:
             print("No positions to display.")
             return
         
@@ -40,12 +39,17 @@ class PortfolioCharts:
         symbols = [pos['contract'].symbol for pos in positions]
         values = [pos['marketValue'] for pos in positions]
         
+        # Add cash if present
+        if cash_balance > 0:
+            symbols.append('CASH')
+            values.append(cash_balance)
+        
         # Create figure
         fig, ax = plt.subplots(figsize=(10, 8))
         
         # Create pie chart with percentages
-        colors = plt.cm.Set3(np.linspace(0, 1, len(symbols)))
-        wedges, texts, autotexts = ax.pie(
+        colors = plt.get_cmap('Set3')(np.linspace(0, 1, len(symbols))).tolist()
+        result = ax.pie(
             values,
             labels=symbols,
             autopct='%1.1f%%',
@@ -53,6 +57,7 @@ class PortfolioCharts:
             colors=colors,
             textprops={'fontsize': 10}
         )
+        wedges, texts, autotexts = result  # type: ignore # autopct ensures 3 elements returned
         
         # Make percentage text bold
         for autotext in autotexts:
@@ -254,8 +259,8 @@ class PortfolioCharts:
     def plot_price_history(
         df,
         symbol: str,
-        avg_cost: float = None,
-        title: str = None
+        avg_cost: Optional[float] = None,
+        title: Optional[str] = None
     ):
         """
         Plot historical price chart with optional purchase price line.

@@ -14,12 +14,14 @@ try:
 except RuntimeError:
     asyncio.set_event_loop(asyncio.new_event_loop())
 
-from connection import IBConnection
-from transactions import TransactionManager
-from portfolio_manager import PortfolioManager
-from display import PortfolioDisplay
-from charts import PortfolioCharts
-from historical_data import HistoricalDataManager
+from modules.connection import IBConnection
+from modules.transactions import TransactionManager
+from modules.portfolio_manager import PortfolioManager
+from modules.display import PortfolioDisplay
+from modules.charts import PortfolioCharts
+from modules.historical_data import HistoricalDataManager
+from modules.metrics import calculate_all_metrics
+from modules.fees import display_fee_comparison, display_rebalance_fees
 
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
@@ -228,6 +230,9 @@ def calculate_and_display_rebalance_plan(
         print(f"Total Buy Amount:  {display.format_currency(total_buy)}")
         print(f"Total Sell Amount: {display.format_currency(total_sell)}")
         print(f"Number of Trades:  {len(filtered_trades)}")
+        
+        # Display fee analysis for these trades
+        display_rebalance_fees(portfolio_value, filtered_trades)
     else:
         print("✓ Portfolio is already balanced within threshold.")
         print(f"  (No trades exceed ${min_trade_value:.2f} minimum)")
@@ -380,6 +385,177 @@ def display_returns(pm: PortfolioManager, display: PortfolioDisplay):
     print()
 
 
+def display_advanced_metrics(
+    hist: HistoricalDataManager,
+    pm: PortfolioManager,
+    display: PortfolioDisplay,
+    benchmark_symbol: str = "SPY"
+):
+    """Display advanced portfolio metrics including VaR, Beta, Sortino, and Calmar ratios."""
+    print("\n" + "=" * 80)
+    print("ADVANCED PORTFOLIO METRICS")
+    print("=" * 80)
+    
+    # Get portfolio positions to calculate returns
+    positions = pm.get_portfolio_positions()
+    
+    if not positions:
+        print("No positions found. Cannot calculate metrics.")
+        return
+    
+    print(f"\nFetching historical data for portfolio analysis...")
+    
+    # Collect historical data for all positions
+    portfolio_data = []
+    weights = []
+    total_value = sum(pos['marketValue'] for pos in positions)
+    
+    for pos in positions:
+        symbol = pos['contract'].symbol
+        weight = pos['marketValue'] / total_value if total_value > 0 else 0
+        
+        print(f"  Fetching {symbol} (weight: {weight:.1%})...", end=" ")
+        try:
+            hist_data = hist.get_position_history(symbol, pos['avgCost'], duration="1 Y")
+            if 'error' not in hist_data and 'data' in hist_data:
+                portfolio_data.append(hist_data['data'])
+                weights.append(weight)
+                print("✓")
+            else:
+                error_msg = hist_data.get('error', 'Unknown error')
+                print(f"✗ {error_msg}")
+        except Exception as e:
+            print(f"✗ {e}")
+            continue
+    
+    if not portfolio_data:
+        print("\nError: Could not fetch historical data for any positions.")
+        print("Make sure you are connected to IBKR and have market data subscriptions.")
+        return
+    
+    print(f"\n✓ Successfully fetched data for {len(portfolio_data)} position(s)")
+    
+    # Calculate weighted portfolio returns
+    # Align all dataframes by date
+    import pandas as pd
+    
+    all_returns = []
+    for i, data in enumerate(portfolio_data):
+        # Calculate daily returns from close prices
+        if 'close' in data.columns:
+            daily_returns = data['close'].pct_change().dropna()
+            weighted_returns = daily_returns * weights[i]
+            all_returns.append(weighted_returns)
+        else:
+            print(f"Warning: No 'close' column in data at index {i}")
+    
+    if not all_returns:
+        print("Error: Could not calculate portfolio returns.")
+        return
+    
+    # Combine returns using pandas
+    portfolio_returns = pd.concat(all_returns, axis=1).sum(axis=1)
+    
+    # Fetch benchmark data (SPY)
+    print(f"Fetching benchmark data ({benchmark_symbol})...")
+    try:
+        benchmark_data = hist.get_position_history(benchmark_symbol, 0, duration="1 Y")
+        if 'error' in benchmark_data or 'data' not in benchmark_data:
+            print(f"Warning: Could not fetch {benchmark_symbol} data. Beta/Alpha/IR will not be available.")
+            benchmark_returns = None
+        else:
+            # Calculate daily returns from close prices
+            benchmark_df = benchmark_data['data']
+            benchmark_returns = benchmark_df['close'].pct_change().dropna().values
+            # Align lengths
+            min_len = min(len(portfolio_returns), len(benchmark_returns))
+            portfolio_returns_array = portfolio_returns.values[-min_len:]
+            benchmark_returns = benchmark_returns[-min_len:]
+    except Exception as e:
+        print(f"Warning: Could not fetch benchmark data: {e}")
+        benchmark_returns = None
+        portfolio_returns_array = portfolio_returns.values
+    
+    # Get max drawdown from portfolio manager
+    returns_data = pm.get_portfolio_returns()
+    cost_basis = returns_data['cost_basis']
+    current_value = returns_data['current_value']
+    
+    # Calculate max drawdown from cumulative returns
+    cumulative_returns = (1 + portfolio_returns).cumprod()
+    running_max = cumulative_returns.expanding().max()
+    drawdowns = (cumulative_returns - running_max) / running_max
+    max_drawdown_pct = abs(drawdowns.min()) * 100
+    
+    # Calculate all metrics
+    if benchmark_returns is not None:
+        metrics = calculate_all_metrics(
+            portfolio_returns=portfolio_returns_array,
+            benchmark_returns=benchmark_returns,
+            max_drawdown=max_drawdown_pct,
+            risk_free_rate=0.04  # 4% risk-free rate
+        )
+    else:
+        metrics = calculate_all_metrics(
+            portfolio_returns=portfolio_returns_array,
+            benchmark_returns=None,
+            max_drawdown=max_drawdown_pct,
+            risk_free_rate=0.04
+        )
+    
+    # Display metrics
+    print("\n" + "=" * 80)
+    print("RISK METRICS")
+    print("=" * 80)
+    print(f"Value at Risk (95%):            {metrics['var_95']:.2f}%")
+    print(f"Value at Risk (99%):            {metrics['var_99']:.2f}%")
+    print(f"Conditional VaR (95%):          {metrics['cvar_95']:.2f}%")
+    print(f"Max Drawdown:                   {max_drawdown_pct:.2f}%")
+    
+    print("\n" + "=" * 80)
+    print("RISK-ADJUSTED RETURN METRICS")
+    print("=" * 80)
+    print(f"Sortino Ratio:                  {metrics['sortino_ratio']:.3f}")
+    print(f"Calmar Ratio:                   {metrics['calmar_ratio']:.3f}")
+    
+    if 'beta' in metrics:
+        print("\n" + "=" * 80)
+        print(f"MARKET COMPARISON (vs {benchmark_symbol})")
+        print("=" * 80)
+        print(f"Beta:                           {metrics['beta']:.3f}")
+        
+        beta_interp = "Market-like"
+        if metrics['beta'] > 1.2:
+            beta_interp = "Higher volatility than market"
+        elif metrics['beta'] < 0.8:
+            beta_interp = "Lower volatility than market"
+        print(f"  → {beta_interp}")
+        
+        print(f"Alpha (annualized):             {metrics['alpha']:.2f}%")
+        alpha_interp = "Outperforming" if metrics['alpha'] > 0 else "Underperforming"
+        print(f"  → {alpha_interp} risk-adjusted expectations")
+        
+        print(f"Information Ratio:              {metrics['information_ratio']:.3f}")
+        ir_interp = "Excellent" if metrics['information_ratio'] > 1.0 else ("Good" if metrics['information_ratio'] > 0.5 else "Modest")
+        print(f"  → {ir_interp} active management")
+    
+    # Add interpretations
+    print("\n" + "=" * 80)
+    print("INTERPRETATIONS")
+    print("=" * 80)
+    print(f"VaR(95%): 95% confidence that daily loss won't exceed {metrics['var_95']:.2f}%")
+    print(f"CVaR(95%): Average loss in the worst 5% of cases is {metrics['cvar_95']:.2f}%")
+    
+    sortino_quality = "Excellent" if metrics['sortino_ratio'] > 2.0 else ("Good" if metrics['sortino_ratio'] > 1.0 else "Modest")
+    print(f"Sortino: {sortino_quality} downside risk-adjusted returns")
+    
+    calmar_quality = "Strong" if metrics['calmar_ratio'] > 0.5 else ("Moderate" if metrics['calmar_ratio'] > 0.3 else "Weak")
+    print(f"Calmar: {calmar_quality} return relative to max drawdown")
+    
+    print("=" * 80)
+    print()
+
+
 def show_help():
     """Display available commands."""
     print("\n" + "=" * 80)
@@ -388,6 +564,8 @@ def show_help():
     print("  portfolio / p     - Show current portfolio status")
     print("  balance / b       - Show account balance and financial summary")
     print("  returns / yield   - Show portfolio returns and performance")
+    print("  metrics / m       - Show advanced metrics (VaR, Beta, Sortino, Calmar)")
+    print("  fees              - Compare IBKR vs Wealthsimple fees")
     print("  history <SYMBOL>  - Show price history for a stock (e.g., 'history SPY')")
     print("  <SYMBOL>          - Quick access to stock history (e.g., 'SPY')")
     print("  chart allocation  - Display portfolio allocation pie chart")
@@ -480,6 +658,16 @@ def main(config_path: str = "config.json"):
                 elif command in ['returns', 'yield', 'performance']:
                     display_returns(pm, display)
                 
+                # Handle advanced metrics display
+                elif command in ['metrics', 'm', 'metric']:
+                    display_advanced_metrics(hist, pm, display)
+                
+                # Handle fee comparison
+                elif command == 'fees':
+                    portfolio_value = pm.get_portfolio_value()
+                    positions = pm.get_portfolio_positions()
+                    display_fee_comparison(portfolio_value, positions)
+                
                 # Handle history commands
                 elif command.startswith('history '):
                     symbol = command.split(' ', 1)[1].upper() if ' ' in command else ''
@@ -530,7 +718,8 @@ def main(config_path: str = "config.json"):
                     
                     if chart_type == 'allocation':
                         positions = pm.get_portfolio_positions()
-                        PortfolioCharts.plot_allocation_pie(positions)
+                        cash_balance = pm.get_cash_balance()
+                        PortfolioCharts.plot_allocation_pie(positions, cash_balance)
                     
                     elif chart_type == 'returns':
                         position_returns = pm.get_position_returns()

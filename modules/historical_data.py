@@ -63,9 +63,12 @@ class HistoricalDataManager:
             # Convert to DataFrame
             if bars:
                 df = util.df(bars)
-                df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
-                return df
+                if df is not None and not df.empty:
+                    df['date'] = pd.to_datetime(df['date'])
+                    df.set_index('date', inplace=True)
+                    return df
+                else:
+                    return pd.DataFrame()
             else:
                 return pd.DataFrame()
                 

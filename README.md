@@ -13,6 +13,7 @@ The system runs as a persistent server, allowing interactive portfolio managemen
 
 **Key Capabilities:**
 - Real-time portfolio monitoring and analysis
+- Automatic Dividend reinvestment
 - Automated rebalancing calculations based on target allocations
 - Event-driven trade execution with live status updates
 - Comprehensive performance analytics and return calculations
@@ -73,7 +74,7 @@ returns = pm.get_portfolio_returns()  # Calculate portfolio yield
 ```
 
 #### 4. **`display.py`** - Data Presentation Layer
-Formats and displays portfolio data with professional tabular output.
+Formats and displays portfolio data with tabular output.
 
 #### 5. **`charts.py`** - Visualization Engine
 Generates interactive matplotlib charts for portfolio analysis.
@@ -107,7 +108,52 @@ history = hist.get_position_history('SPY', avg_cost=667.41, duration='1 Y')
 metrics = history['metrics']  # volatility, sharpe ratio, max drawdown, etc.
 ```
 
-#### 7. **`main.py`** - Interactive Server Interface
+#### 7. **`metrics.py`** - Advanced Portfolio Metrics
+Calculates sophisticated financial risk and performance metrics for portfolio analysis.
+
+**Available Metrics:**
+- **Value at Risk (VaR)**: 95% and 99% confidence levels using historical and parametric methods
+- **Conditional VaR (CVaR)**: Expected loss in worst-case scenarios
+- **Beta**: Portfolio sensitivity to market movements
+- **Alpha**: Risk-adjusted excess returns (Jensen's Alpha)
+- **Sortino Ratio**: Downside risk-adjusted returns
+- **Calmar Ratio**: Return relative to maximum drawdown
+- **Information Ratio**: Active management consistency vs benchmark
+
+```python
+from metrics import calculate_all_metrics
+
+metrics = calculate_all_metrics(
+    portfolio_returns=portfolio_returns,
+    benchmark_returns=spy_returns,
+    max_drawdown=12.5,
+    risk_free_rate=0.04
+)
+```
+
+#### 8. **`fees.py`** - Fee Comparison & Analysis
+Compares IBKR's per-trade fees with Wealthsimple's annual management fee to determine cost-effectiveness.
+
+**Key Features:**
+- IBKR tiered fee structure calculation (CAD $0.008/share for ≤300k shares)
+- Minimum ($1.00) and maximum (0.5% of trade value) per-order fees
+- Breakeven analysis: how many trades per year before IBKR becomes more expensive
+- Real-time rebalancing fee calculation for specific trade plans
+- Multiple scenario analysis (small/medium/large trades)
+
+See [FEE_COMPARISON.md](docs/FEE_COMPARISON.md) for detailed fee analysis.
+
+```python
+from fees import display_fee_comparison, display_rebalance_fees
+
+# General comparison
+display_fee_comparison(portfolio_value=1_000_000, positions=positions)
+
+# Specific rebalancing fees
+display_rebalance_fees(portfolio_value=1_000_000, trades=rebalance_trades)
+```
+
+#### 9. **`main.py`** - Interactive Server Interface
 Persistent command server that orchestrates all modules into a cohesive application.
 
 ---
@@ -183,6 +229,10 @@ The system uses a JSON configuration file for flexible deployment across differe
 | `portfolio` | `p` | Display current positions and account summary |
 | `balance` | `b` | Show account balance, buying power, and margin info |
 | `returns` | `yield` | Calculate and display portfolio returns/performance |
+| `metrics` | `m` | Show advanced risk metrics (VaR, Beta, Sortino, Calmar) |
+| `fees` | - | Compare IBKR vs Wealthsimple fee structures |
+| `history <SYMBOL>` | - | Show price history for a specific stock (e.g., `history SPY`) |
+| `<SYMBOL>` | - | Quick access to stock history (e.g., `SPY`) |
 | `chart allocation` | - | Show portfolio allocation pie chart |
 | `chart returns` | - | Show position returns bar chart |
 | `chart pnl` | - | Show P&L breakdown by position |
@@ -254,14 +304,30 @@ Calculates:
 - Return percentages (position-level and portfolio-level)
 - Daily P&L tracking
 
-### 6. Professional Data Visualization
+### 6. Advanced Portfolio Metrics
+Comprehensive risk and performance analytics including:
+- **Value at Risk (VaR)**: Daily loss estimates at 95% and 99% confidence
+- **Conditional VaR**: Average loss in worst 5% of scenarios
+- **Beta & Alpha**: Market correlation and risk-adjusted excess returns
+- **Sortino Ratio**: Focuses on downside volatility only
+- **Calmar Ratio**: Returns relative to maximum drawdown
+- **Information Ratio**: Measures consistency of active returns
+
+### 7. Fee Comparison Analysis
+Automated cost comparison between:
+- **IBKR**: Per-trade tiered fees ($0.008/share, $1 min, 0.5% max)
+- **Wealthsimple**: 0.5% annual management fee
+
+Calculates breakeven points and provides real-time fee estimates for rebalancing trades. See [FEE_COMPARISON.md](docs/FEE_COMPARISON.md) for details.
+
+### 8. Data Visualization
 Interactive matplotlib charts with:
 - Color-coded gains/losses (green/red)
 - Value labels on all data points
-- Professional styling and legends
+- Styling and legends
 - Export capabilities (save as PNG, PDF, SVG)
 
-### 7. Historical Data Analysis & Advanced Metrics
+### 9. Historical Data Analysis & Advanced Metrics
 Comprehensive stock analysis with:
 - **1-year historical price data** fetched directly from IBKR
 - **Volatility calculation** (annualized standard deviation)
@@ -363,13 +429,113 @@ Sharpe Ratio:     0.82
 # Opens performance metrics bar chart
 ```
 
-### 7. Execute Rebalancing
+### 7. View Advanced Risk Metrics
+```bash
+> metrics
+
+ADVANCED PORTFOLIO METRICS
+================================================================================
+Fetching historical data for portfolio analysis...
+  Fetching SPY (weight: 32.7%)... ✓
+  Fetching QQQ (weight: 23.8%)... ✓
+  ...
+
+RISK METRICS
+================================================================================
+Value at Risk (95%):            1.24%
+Value at Risk (99%):            2.10%
+Conditional VaR (95%):          1.67%
+Max Drawdown:                   8.92%
+
+RISK-ADJUSTED RETURN METRICS
+================================================================================
+Sortino Ratio:                  1.245
+Calmar Ratio:                   0.892
+
+MARKET COMPARISON (vs SPY)
+================================================================================
+Beta:                           0.987
+  → Market-like
+Alpha (annualized):             2.34%
+  → Outperforming risk-adjusted expectations
+Information Ratio:              0.654
+  → Good active management
+```
+
+### 8. Compare Broker Fees
+```bash
+> fees
+
+IBKR vs WEALTHSIMPLE FEE COMPARISON
+================================================================================
+Portfolio Value: $1,077,254.16 CAD
+Wealthsimple Annual Fee (0.5%): $5,386.27 CAD
+
+BREAKEVEN ANALYSIS BY TRADE SIZE
+================================================================================
+Small trades (10 shares @ $176.13)
+  IBKR Fee per Trade:       $1.00
+  Max Annual Trades:        5386
+  Max Monthly Trades:       448.9
+...
+```
+
+### 9. Execute Rebalancing with Fee Analysis
+```bash
+> plan
+# Or: > rebalance
+
+TARGET ALLOCATIONS
+================================================================================
+SPY        32.70%     → $430,901.66
+QQQ        23.80%     → $313,386.94
+...
+
+REBALANCING PLAN
+================================================================================
+Symbol     Action   Quantity     Difference
+SPY        SELL     18           -$12,287.66
+IWM        BUY      5            +$1,152.74
+TLT        BUY      9            +$749.56
+
+Total Buy Amount:  $1,902.30
+Total Sell Amount: $12,287.66
+Number of Trades:  3
+
+REBALANCING FEE ANALYSIS
+================================================================================
+Portfolio Value: $1,077,254.16 CAD
+Number of Trades: 3
+
+TRADE-BY-TRADE FEE BREAKDOWN
+--------------------------------------------------------------------------------
+Symbol     Action Shares     Price        Trade Value     IBKR Fee
+SPY        SELL   18         $690.33      $12,425.94      $1.00
+IWM        BUY    5          $252.71      $1,263.55       $1.00
+TLT        BUY    9          $87.26       $785.34         $1.00
+--------------------------------------------------------------------------------
+TOTAL IBKR FEES:                                          $3.00
+
+COMPARISON TO WEALTHSIMPLE
+================================================================================
+Wealthsimple Annual Fee (0.5%):        $5,386.27
+Wealthsimple Quarterly Equivalent:     $1,346.57
+IBKR Fees for This Rebalance:          $3.00
+
+✓ SAVINGS with IBKR (vs quarterly):    $1343.57
+✓ Projected Annual Savings (4x/year):  $5374.27
+
+  → You can rebalance 1795.4 times per year
+    and still pay LESS than Wealthsimple
+```
+
+### 10. Execute Trades
 ```bash
 > rebalance
-Submitting 4 orders concurrently...
+Submitting 3 orders concurrently...
 [STATUS] SPY Submitted  filled=0.0
-[FILL]   SPY 19 @ $687.37
-[FILLED] SPY totalFilled=19 avgPx=$687.37
+[FILL]   SPY 18 @ $690.33
+[FILLED] SPY totalFilled=18 avgPx=$690.33
 ...
 ✓ Rebalancing complete
 ```
@@ -391,18 +557,36 @@ Submitting 4 orders concurrently...
 
 ```
 IBKR_portolio_manager/
-├── main.py                 # Interactive server interface
-├── connection.py           # IB connection management
-├── transactions.py         # Trade execution engine
-├── portfolio_manager.py    # Portfolio analytics core
-├── display.py             # Data presentation layer
-├── charts.py              # Visualization engine
-├── config.json            # Configuration file
-├── Charts/                # Visualization exports
-│   ├── allocation_chart.png
-│   ├── returns_chart.png
-│   └── pnl_chart.png
-└── README.md
+├── main.py                           # Interactive server interface (entry point)
+├── config.json                       # Configuration file
+├── README.md                         # Main documentation
+│
+├── modules/                          # Core application modules
+│   ├── connection.py                 # IB connection management
+│   ├── transactions.py               # Trade execution engine
+│   ├── portfolio_manager.py          # Portfolio analytics core
+│   ├── display.py                    # Data presentation layer
+│   ├── charts.py                     # Visualization engine
+│   ├── historical_data.py            # Historical data fetching & analysis
+│   ├── metrics.py                    # Advanced portfolio metrics (VaR, Beta, etc.)
+│   ├── fees.py                       # IBKR vs Wealthsimple fee comparison
+│   └── decimal_utils.py              # Decimal arithmetic utilities
+│
+├── docs/                             # Documentation
+│   ├── FEE_COMPARISON.md             # Detailed fee analysis guide
+│   └── METRICS.md                    # Advanced metrics documentation
+│
+├── examples/                         # Example scripts
+│   ├── example_usage.py              # Basic usage examples
+│   └── api.py                        # API exploration examples
+│
+├── tests/                            # Test files
+│   └── test2.py                      # Test scripts
+│
+└── Charts/                           # Visualization exports
+    ├── portfolio_allocation.png
+    ├── position_returns.png
+    └── p&l_breakdown_by_position.png
 ```
 
 ---
@@ -411,7 +595,7 @@ IBKR_portolio_manager/
 
 - **More info for individual stocks**: everything IBKR allows and more
 - **More info on yield (and predicted yield) and cashflow allocation**: Predicting futur yield and see yield in the performance
-
+fdata
 
 ---
 
@@ -435,21 +619,6 @@ Ensure IBKR API is enabled:
 3. Enable "ActiveX and Socket Clients"
 4. Add `127.0.0.1` to trusted IPs
 5. Uncheck "Read-Only API" (if executing trades)
-
----
-
-## Educational Value
-
-This project demonstrates:
-
-- **Software Architecture**: Clean separation of concerns with modular design
-- **Financial Engineering**: Portfolio theory implementation (Modern Portfolio Theory concepts)
-- **Concurrent Programming**: Event-driven callbacks for non-blocking operations
-- **API Integration**: Real-world financial API usage with error handling
-- **Data Visualization**: Professional charts for financial data analysis
-- **Risk Management**: Production-ready safety mechanisms
-- **Configuration Management**: JSON-based flexible deployment
-- **User Interface Design**: Interactive CLI with comprehensive commands
 
 ---
 
